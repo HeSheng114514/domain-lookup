@@ -2,7 +2,7 @@
   "name": "domain-lookup",
   "productName": "域名查询",
   "version": "1.0.0",
-  "description": "域名查询工具:WHOIS / RDAP / DNS / 可用性检测,带中文桌面界面与 CLI",
+  "description": "域名查询工具:WHOIS / RDAP / DNS / 可用性检测。零依赖 Node.js 实现,提供桌面版与网页版。",
   "main": "electron/main.js",
   "bin": {
     "domain-lookup": "cli.js"
@@ -13,11 +13,14 @@
     "cli": "node cli.js",
     "test": "node tests/run.js",
     "icon": "node tools/make-icon.js",
-    "dist": "node tools/build-desktop.js",
-    "shortcut": "node tools/make-shortcut.js"
+    "build:desktop": "node tools/build-desktop.js",
+    "build:web": "node tools/build-web.js",
+    "build:all": "node tools/build-web.js && node tools/build-desktop.js",
+    "shortcut": "node tools/make-shortcut.js",
+    "release": "node tools/github-release.js"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20.12"
   },
   "keywords": [
     "whois",
@@ -26,10 +29,13 @@
     "domain",
     "域名查询"
   ],
-  "license": "MIT",
+  "license": "GPL-3.0-or-later",
+  "author": "HeSheng",
   "private": true,
   "devDependencies": {
     "@electron/packager": "^20.3.0",
-    "electron": "^44.4.3"
+    "electron": "^44.4.3",
+    "esbuild": "^0.28.2",
+    "postject": "^1.0.0-alpha.6"
   }
 }

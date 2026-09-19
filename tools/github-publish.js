@@ -33,6 +33,13 @@ const DESCRIPTION = process.env.GH_DESC
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'out', '.git', '.cache']);
 /** 这些文件名不进仓库 */
 const SKIP_FILES = new Set(['.DS_Store', 'Thumbs.db', 'desktop.ini']);
+/** 这些相对路径不进仓库(构建中间产物,可由脚本重新生成) */
+const SKIP_PATTERNS = [
+  /^build\/web-bundle\.cjs$/,
+  /^build\/sea-config\.json$/,
+  /^build\/sea-prep\.blob$/,
+  /^build\/tmp\//,
+];
 /** 大文件保护:超过这个大小就拒绝上传(正常文件都远小于它) */
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
 
@@ -84,6 +91,10 @@ function collectFiles(dir, base = dir, acc = []) {
     }
     if (!entry.isFile()) continue;
     if (SKIP_FILES.has(entry.name)) continue;
+    if (SKIP_PATTERNS.some((re) => re.test(rel))) {
+      console.log(`  跳过构建中间产物: ${rel}`);
+      continue;
+    }
     if (/token/i.test(entry.name)) {
       console.log(`  跳过疑似凭据文件: ${rel}`);
       continue;
@@ -209,7 +220,7 @@ function collectFiles(dir, base = dir, acc = []) {
   const useParent = parentSha && !seeded && !SQUASH;
 
   const message = useParent
-    ? '更新项目文件\n\n由 tools/github-publish.js 发布'
+    ? (process.env.GH_MESSAGE || '更新项目文件\n\n由 tools/github-publish.js 发布')
     : `域名查询工具:WHOIS / RDAP / DNS 完整实现
 
 - WHOIS 协议客户端:TCP 43 直连注册局,206 个 TLD 映射 + IANA 自动转介,

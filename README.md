@@ -1,7 +1,10 @@
 # 域名查询工具
 
-一个**零依赖**的域名信息查询工具,支持 WHOIS、RDAP、DNS 记录查询和域名可用性检测。
-有**桌面软件**、**本地网页**和**命令行**三种用法。
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+
+一个域名信息查询工具,支持 WHOIS、RDAP、DNS 记录查询和域名可用性检测。
+核心是**零依赖**的 Node.js 实现,在此之上提供**桌面版**和**网页版**两种打包形态,
+外加一个命令行工具。
 
 所有查询都是**直接走协议**:WHOIS 用 TCP 43 端口直连注册局,RDAP 用 HTTPS 直连注册局,
 不经过任何第三方网站的接口或爬虫,所以没有速率陷阱,数据也最原始可靠。
@@ -17,48 +20,49 @@
 
 ---
 
-## 快速开始
+## 下载
 
-### 方式一:桌面软件(推荐)
+到 [Releases](https://github.com/HeSheng114514/domain-lookup/releases) 页面下载,
+两个版本都是**免安装**的,解压后双击即可,**不需要安装 Node.js**。
 
-打包好的程序在 **`dist/域名查询-win32-x64/`**,双击里面的 **`域名查询.exe`** 即可启动。
+| 版本 | 文件 | 大小 | 适用场景 |
+|---|---|---|---|
+| 🖥️ 桌面版 | `domain-lookup-desktop-*.zip` | 约 140 MB | 独立桌面窗口、中文菜单、内置使用说明 |
+| 🌐 网页版 | `domain-lookup-web-*.zip` | 约 38 MB | 单文件,双击后自动打开浏览器,更轻量 |
 
-- 独立的桌面窗口,有自己的任务栏图标,不是浏览器标签页
-- **不需要安装 Node.js**,整个文件夹拷到任何 Windows 10/11 电脑上都能直接跑
-- 桌面和开始菜单里已经有快捷方式了
+- **桌面版** —— 解压后双击 `域名查询.exe`
+- **网页版** —— 解压后双击 `域名查询-web.exe`,程序会起一个本地服务并自动打开浏览器
 
-如果还没打包,或者想重新生成:
-
-```bash
-npm install                 # 安装 Electron(仅打包需要,运行时不需要)
-node tools/build-desktop.js # 打包成免安装程序 → dist/
-node tools/make-shortcut.js # 创建桌面 + 开始菜单快捷方式
-```
-
-> 第一次 `npm install` 要下载约 150MB 的 Electron 二进制。如果卡住或失败,
-> 可以指定国内镜像加速:
-> ```bash
-> set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
-> npm install
-> ```
-
-### 方式二:本地网页
-
-不想要桌面版的话,也可以只跑 Web 服务:
+想要命令行版本,直接拿源码跑就行(零依赖):
 
 ```bash
-node server.js
+node cli.js example.com
 ```
 
-然后浏览器打开 **http://127.0.0.1:8420**
+---
 
-Windows 用户可以双击 **`启动.bat`**,它会自动打开浏览器(默认端口 8420,可传参换端口):
+## 快速开始(源码)
+
+### 环境要求
+
+- **跑源码 / 命令行 / 网页版** —— 只需要 Node.js 20.12 或更高版本,零第三方依赖
+- **构建桌面版** —— 额外需要 `npm install`(会下载 Electron,约 150MB)
+
+### 三种用法
+
+```bash
+node server.js          # 本地网页版 → http://127.0.0.1:8420
+node cli.js example.com # 命令行
+npm run desktop         # 桌面版开发模式(需要先 npm install)
+```
+
+Windows 用户可以双击 **`启动.bat`** 一键启动网页版(默认端口 8420,可传参换端口):
 
 ```cmd
 启动.bat 9000
 ```
 
-### 方式三:命令行
+### 命令行用法
 
 ```bash
 node cli.js example.com                  # WHOIS + DNS 概览
@@ -70,8 +74,6 @@ node cli.js --tlds co                    # 搜索内置支持的顶级域
 node cli.js --help                       # 完整帮助
 ```
 
-命令行和本地网页**只需要 Node.js 18+,不需要任何第三方依赖**。Electron 只是打包桌面版时
-才用到的开发依赖。
 
 
 ---
@@ -185,14 +187,19 @@ node cli.js --bulk domains.txt --check --concurrency=6
 ├── cli.js                  命令行工具
 ├── 启动.bat                Windows 一键启动网页版
 ├── package.json
-├── electron/               桌面版(仅打包时用到 Electron)
+├── LICENSE                 GPL-3.0 全文
+├── electron/               桌面版外壳
 │   ├── main.js             主进程:内嵌服务、窗口、菜单、单实例
-│   └── selftest.js         桌面版自检
+│   └── selftest.js         桌面版自检(在真实 Electron 里跑完整流程)
+├── sea/
+│   └── entry.js            网页端单文件版的入口(SEA)
 ├── tools/
 │   ├── make-icon.js        生成图标(手写 PNG/ICO 编码器)
-│   ├── build-desktop.js    打包成免安装 exe
+│   ├── build-desktop.js    打包桌面版 → dist/域名查询-win32-x64/
+│   ├── build-web.js        打包网页端单文件 exe → dist/域名查询-web/
 │   ├── make-shortcut.js    创建桌面/开始菜单快捷方式
-│   └── github-publish.js   发布到 GitHub(不需要装 git)
+│   ├── github-publish.js   把源码发布到 GitHub(不需要装 git)
+│   └── github-release.js   打包并发布 Release 产物
 ├── lib/
 │   ├── tld-servers.js      TLD → WHOIS 服务器映射表(206 个)
 │   ├── domain.js           域名规范化 / punycode / 公共后缀解析
@@ -201,23 +208,46 @@ node cli.js --bulk domains.txt --check --concurrency=6
 │   ├── rdap.js             RDAP 客户端 + IANA bootstrap + JSON 归一化
 │   ├── dns.js              DNS 查询 + 劫持检测
 │   ├── availability.js     三源交叉验证可用性检测
-│   └── merge.js            WHOIS/RDAP 结果合并策略
+│   ├── merge.js            WHOIS/RDAP 结果合并策略
+│   └── assets.js           静态资源读取(优先内嵌,回退磁盘)
 ├── public/
 │   ├── index.html          界面结构
 │   ├── help.html           应用内使用说明
 │   ├── style.css           样式(深色/浅色主题)
 │   └── app.js              前端逻辑
-├── build/                  生成的应用图标
+├── build/                  生成的应用图标 + 打包中间产物
 └── tests/
-    ├── run.js              测试套件
+    ├── run.js              单元测试 + 网络测试
+    ├── verify-web.js       验证网页端单文件 exe
     └── manual.js           手工联调脚本
 ```
 
 ---
 
-## 桌面版细节
+## 构建发布产物
 
-### 它是怎么工作的
+```bash
+npm install          # 只在构建桌面版时需要(下载 Electron)
+npm run build:web    # 网页端单文件 exe → dist/域名查询-web/
+npm run build:desktop # 桌面版          → dist/域名查询-win32-x64/
+npm run build:all    # 两个都构建
+```
+
+### 网页端是怎么做成单文件的
+
+`tools/build-web.js` 用 **Node 的 SEA**(Single Executable Application)功能:
+
+1. **esbuild** 把 `server.js` + `lib/` + `sea/entry.js` 打成**一个 JS 文件**
+2. 生成 `sea-config.json`,把 `public/` 下的静态资源登记为**内嵌资源**
+3. `node --experimental-sea-config` 生成注入用的 blob
+4. 复制 `node.exe` 作为模板,**剥离它的 Authenticode 签名**
+   (签名被注入破坏后比没有签名更可疑,所以干脆去掉)
+5. **postject** 把 blob 注入进去,得到 `域名查询-web.exe`
+
+静态资源走 `lib/assets.js`:`sea.isSea()` 为真时从内嵌资源读,否则回退到磁盘。
+所以同一份 `server.js` 既能在源码模式跑,也能在内嵌模式下跑,不用维护两份代码。
+
+### 桌面版细节
 
 桌面版本质上是一个 Electron 外壳:**HTTP 服务直接跑在主进程里**,绑定
 `127.0.0.1` 上的**随机空闲端口**,窗口再加载这个本地地址。
@@ -240,6 +270,13 @@ node cli.js --bulk domains.txt --check --concurrency=6
 | 视图 | 重新加载、缩放、全屏、开发者工具 |
 | 工具 | 在浏览器中打开本机服务、打开数据目录、跳转批量检测、切换主题 |
 | 帮助 | 使用说明(F1)、关于 |
+
+> 构建桌面版时如果 Electron 下载卡住,可以指定国内镜像:
+> ```cmd
+> set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
+> npm install
+> ```
+
 
 ### 自己验证桌面版
 
@@ -308,6 +345,7 @@ curl "http://127.0.0.1:8420/api/check?domain=example.com"
 ```bash
 node tests/run.js          # 离线单元测试(65 项,不联网)
 node tests/run.js --net    # 加上真实网络测试(共 73 项)
+node tests/verify-web.js   # 启动网页端 exe,验证 15 项
 node tests/manual.js example.com google.cn    # 手工联调,打印解析细节
 ```
 
@@ -316,7 +354,12 @@ node tests/manual.js example.com google.cn    # 手工联调,打印解析细节
 
 网络测试会真实查询 WHOIS、RDAP 和 DNS,并验证可用性判定不受 DNS 劫持影响。
 
-桌面版另有 24 项自检(见上一节)。
+两个打包产物各有一套端到端自检,都是真的把程序跑起来、发真实查询:
+
+| 产物 | 方式 | 项数 |
+|---|---|---|
+| 桌面版 | `set DL_SELFTEST=1` 后启动 exe,报告写到临时目录 | 24 项 |
+| 网页版 | `node tests/verify-web.js` | 15 项 |
 
 ---
 
@@ -345,7 +388,30 @@ node tools/github-publish.js
 > `409 Git Repository is empty`)。脚本遇到空仓库会先用 README 播种一个初始提交,
 > 最后再把分支强制指向正式提交,所以历史里只会看到一条干净的提交。
 
+### 发布 Release 产物
 
+`tools/github-release.js` 会把两个版本分别压成 zip,生成 SHA256 校验文件,
+然后创建 tag 并上传到 Release:
+
+```bash
+npm run build:all
+set GH_TOKEN=你的token
+node tools/github-release.js
+```
+
+| 环境变量 | 说明 |
+|---|---|
+| `GH_TOKEN` | 必填 |
+| `GH_TAG` | 标签名,默认 `v<package.json 里的 version>` |
+| `GH_SKIP_ZIP` | 设为 `1` 复用已存在的 zip,不重新压缩 |
+
+产出的资源:
+
+| 文件 | 说明 |
+|---|---|
+| `domain-lookup-desktop-v1.0.0-win32-x64.zip` | 桌面版 |
+| `domain-lookup-web-v1.0.0.zip` | 网页版单文件 |
+| `SHA256SUMS.txt` | 校验和 |
 
 ---
 
@@ -385,4 +451,21 @@ RIPE 风格用小写 key。解析器同时支持这几种,并对每个字段维�
 
 ## 许可
 
-MIT
+本项目以 **GNU General Public License v3.0 或更新版本**(GPL-3.0-or-later)发布,
+完整许可证文本见 [LICENSE](LICENSE)。
+
+Copyright (C) 2026 HeSheng
+
+这意味着你可以自由地使用、修改和分发这个程序,但**如果你分发修改后的版本,
+必须同样以 GPL 开源并提供源代码**。本程序不提供任何担保。
+
+用到的第三方组件:
+
+| 组件 | 用途 | 许可 |
+|---|---|---|
+| Node.js | 运行时(网页端单文件版内嵌) | MIT |
+| Electron / Chromium | 桌面版运行时 | MIT / BSD |
+| esbuild | 构建时打包 JS | MIT |
+| postject | 构建时注入 SEA blob | MIT |
+
+这些依赖只在构建阶段使用,或作为独立运行时随包分发,不影响本项目的 GPL 授权。

@@ -14,6 +14,7 @@ const { dnsLookup, resolveChain, systemServers, TYPES } = require('./lib/dns');
 const { checkAvailability, bulkAvailability } = require('./lib/availability');
 const { TLDS } = require('./lib/tld-servers');
 const { mergeInfo } = require('./lib/merge');
+const { getEmbedded, isSeaBuild: IsSeaBuild } = require('./lib/assets');
 const pkg = require('./package.json');
 
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -250,6 +251,20 @@ async function serveStatic(req, res, url) {
   const filePath = path.join(PUBLIC_DIR, safe);
   if (!filePath.startsWith(PUBLIC_DIR)) return sendText(res, 403, '403 Forbidden');
 
+  // 单文件版(SEA)把 public/ 内嵌进 exe,磁盘上没有这个目录,所以先查内嵌资源
+  if (IsSeaBuild) {
+    const emb = getEmbedded(`public/${safe.split(path.sep).join('/')}`);
+    if (emb) {
+      const ext = path.extname(safe).toLowerCase();
+      res.writeHead(200, {
+        'content-type': MIME[ext] || 'application/octet-stream',
+        'content-length': emb.length,
+        'cache-control': 'no-cache',
+      });
+      return res.end(emb);
+    }
+  }
+
   try {
     const stat = await fsp.stat(filePath);
     if (stat.isDirectory()) return serveStatic(req, res, new URL(`${rel}/index.html`, url.origin));
@@ -271,6 +286,7 @@ async function serveStatic(req, res, url) {
       sendText(res, 404, '404 Not Found');
     }
   }
+  return undefined;
 }
 
 function createServer() {
