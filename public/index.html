@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>域名查询工具 · WHOIS / RDAP / DNS</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌐</text></svg>">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">🌐</span>
+    <div class="brand-text">
+      <h1>域名查询工具</h1>
+      <p>WHOIS · RDAP · DNS · 可用性检测</p>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <span class="pill" id="metaPill" title="运行环境信息">加载中…</span>
+    <button class="icon-btn" id="themeToggle" title="切换主题">🌙</button>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ============ 查询区 ============ -->
+  <section class="panel search-panel">
+    <form id="searchForm" class="search-row" autocomplete="off">
+      <div class="input-wrap">
+        <input id="domainInput" type="text" placeholder="输入域名,例如 example.com / 中文域名.中国 / https://github.com"
+               spellcheck="false" autofocus>
+        <button type="button" class="clear-btn" id="clearBtn" title="清空">✕</button>
+      </div>
+      <button type="submit" class="primary-btn" id="searchBtn">查询</button>
+    </form>
+
+    <div class="search-extras">
+      <div class="samples">
+        <span class="samples-label">示例:</span>
+        <button class="chip" data-sample="example.com">example.com</button>
+        <button class="chip" data-sample="google.cn">google.cn</button>
+        <button class="chip" data-sample="github.io">github.io</button>
+        <button class="chip" data-sample="中国互联网络信息中心.中国">中文域名</button>
+      </div>
+      <div class="opts">
+        <label class="switch"><input type="checkbox" id="optRdap" checked><span>RDAP</span></label>
+        <label class="switch"><input type="checkbox" id="optDns" checked><span>DNS</span></label>
+        <label class="switch"><input type="checkbox" id="optDeep" checked><span>深入注册商 WHOIS</span></label>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 状态提示 ============ -->
+  <div id="alertBox" class="alert hidden"></div>
+
+  <!-- ============ 加载中 ============ -->
+  <div id="loading" class="loading hidden">
+    <div class="spinner"></div>
+    <div class="loading-text">
+      <strong id="loadingTitle">正在查询…</strong>
+      <span id="loadingSub">正在连接注册局 WHOIS 服务器</span>
+    </div>
+  </div>
+
+  <!-- ============ 结果区 ============ -->
+  <section id="resultArea" class="hidden">
+
+    <nav class="tabs" id="tabs">
+      <button class="tab active" data-tab="overview">概览</button>
+      <button class="tab" data-tab="dns">DNS 记录</button>
+      <button class="tab" data-tab="whois">WHOIS 原文</button>
+      <button class="tab" data-tab="rdap">RDAP 数据</button>
+      <button class="tab" data-tab="raw">诊断信息</button>
+      <div class="tabs-spacer"></div>
+      <div class="export-group">
+        <button class="ghost-btn" id="copyBtn">复制</button>
+        <button class="ghost-btn" id="exportJson">JSON</button>
+        <button class="ghost-btn" id="exportCsv">CSV</button>
+        <button class="ghost-btn" id="exportTxt">TXT</button>
+      </div>
+    </nav>
+
+    <div class="tab-panels">
+      <div class="tab-panel active" id="panel-overview"></div>
+      <div class="tab-panel" id="panel-dns"></div>
+      <div class="tab-panel" id="panel-whois"></div>
+      <div class="tab-panel" id="panel-rdap"></div>
+      <div class="tab-panel" id="panel-raw"></div>
+    </div>
+  </section>
+
+  <!-- ============ 批量查询 ============ -->
+  <section class="panel">
+    <details id="bulkDetails">
+      <summary>
+        <span class="summary-title">批量查询 / 可用性检测</span>
+        <span class="summary-hint">一次检查多个域名或同一名字的多个后缀,结果实时流式返回</span>
+      </summary>
+      <div class="bulk-body">
+        <textarea id="bulkInput" rows="4" spellcheck="false"
+          placeholder="每行一个域名,或用空格/逗号分隔,例如:&#10;example.com&#10;mybrand.cn mybrand.net mybrand.io"></textarea>
+        <div class="bulk-controls">
+          <label class="field">
+            <span>并发</span>
+            <select id="bulkConcurrency">
+              <option value="2">2</option>
+              <option value="4" selected>4</option>
+              <option value="6">6</option>
+              <option value="8">8</option>
+            </select>
+          </label>
+          <button class="primary-btn" id="bulkBtn">开始批量检测</button>
+          <button class="ghost-btn" id="bulkSample">填入示例</button>
+        </div>
+
+        <div id="bulkProgress" class="bulk-progress hidden">
+          <div class="progress-bar"><div class="progress-fill" id="bulkFill"></div></div>
+          <span id="bulkProgressText">0 / 0</span>
+        </div>
+
+        <div id="bulkResults" class="bulk-results"></div>
+      </div>
+    </details>
+  </section>
+
+  <footer class="foot">
+    <span>纯 Node.js 零依赖实现 · 直接走 WHOIS 协议(TCP 43)与 RDAP(HTTPS),不经过任何第三方网站</span>
+    <span id="footMeta"></span>
+  </footer>
+</main>
+
+<script src="/app.js"></script>
+</body>
+</html>

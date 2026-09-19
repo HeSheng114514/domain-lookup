@@ -1,0 +1,35 @@
+{
+  "name": "domain-lookup",
+  "productName": "域名查询",
+  "version": "1.0.0",
+  "description": "域名查询工具:WHOIS / RDAP / DNS / 可用性检测,带中文桌面界面与 CLI",
+  "main": "electron/main.js",
+  "bin": {
+    "domain-lookup": "cli.js"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "desktop": "electron .",
+    "cli": "node cli.js",
+    "test": "node tests/run.js",
+    "icon": "node tools/make-icon.js",
+    "dist": "node tools/build-desktop.js",
+    "shortcut": "node tools/make-shortcut.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "whois",
+    "rdap",
+    "dns",
+    "domain",
+    "域名查询"
+  ],
+  "license": "MIT",
+  "private": true,
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "electron": "^44.4.3"
+  }
+}

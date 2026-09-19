@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>使用说明 · 域名查询工具</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  .doc { max-width: 900px; margin: 0 auto; padding: 28px 32px 60px; }
+  .doc h1 { font-size: 24px; margin: 0 0 6px; }
+  .doc .sub { color: var(--text-faint); font-size: 13px; margin-bottom: 28px; }
+  .doc h2 {
+    font-size: 16px; margin: 32px 0 12px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .doc h3 { font-size: 14px; margin: 20px 0 8px; color: var(--accent-text); }
+  .doc p, .doc li { font-size: 13.5px; line-height: 1.85; color: var(--text-dim); }
+  .doc strong { color: var(--text); font-weight: 600; }
+  .doc code {
+    font-family: var(--mono); font-size: 12.5px; padding: 2px 6px;
+    background: var(--code-bg); border: 1px solid var(--border-soft);
+    border-radius: 4px; color: var(--accent-text);
+  }
+  .doc ul { padding-left: 22px; margin: 8px 0; }
+  .doc table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+  .doc th, .doc td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border-soft); }
+  .doc th { font-size: 11.5px; text-transform: uppercase; letter-spacing: .6px; color: var(--text-faint); }
+  .doc td { color: var(--text-dim); }
+  .doc kbd {
+    font-family: var(--mono); font-size: 11.5px; padding: 2px 7px;
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-bottom-width: 2px; border-radius: 5px; color: var(--text);
+  }
+  .tip {
+    padding: 12px 16px; border-radius: var(--radius-sm); margin: 14px 0;
+    background: var(--info-soft); border-left: 3px solid var(--info);
+    font-size: 13px; color: var(--text-dim);
+  }
+  .tip.warn { background: var(--warn-soft); border-left-color: var(--warn); }
+  .toc { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+  .toc a {
+    font-size: 12.5px; padding: 4px 12px; border-radius: 999px; text-decoration: none;
+    background: var(--panel-2); border: 1px solid var(--border-soft); color: var(--text-dim);
+  }
+  .toc a:hover { color: var(--accent-text); border-color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="doc">
+  <h1>域名查询工具 · 使用说明</h1>
+  <div class="sub">WHOIS · RDAP · DNS · 可用性检测 —— 直接通过协议向全球注册局查询</div>
+
+  <div class="toc">
+    <a href="#start">快速上手</a>
+    <a href="#whois">WHOIS 查询</a>
+    <a href="#dns">DNS 记录</a>
+    <a href="#avail">可用性检测</a>
+    <a href="#batch">批量查询</a>
+    <a href="#export">导出与分享</a>
+    <a href="#keys">快捷键</a>
+    <a href="#limit">已知限制</a>
+  </div>
+
+  <h2 id="start">快速上手</h2>
+  <p>
+    在顶部输入框里填域名,按 <kbd>Enter</kbd> 或点「查询」即可。输入很宽松,下面这些写法都能识别:
+  </p>
+  <ul>
+    <li><code>example.com</code> —— 标准写法</li>
+    <li><code>https://example.com/path?a=1</code> —— 会自动剥掉协议、路径、参数</li>
+    <li><code>example.com:8080</code> / <code>user@example.com</code> —— 端口和用户名会被忽略</li>
+    <li><code>中国互联网络信息中心.中国</code> —— 中文域名会自动转成 punycode 再查询</li>
+  </ul>
+
+  <h2 id="whois">WHOIS 查询</h2>
+  <p>查询不是简单地请求一个网址,而是完整走一遍 WHOIS 协议:</p>
+  <ul>
+    <li>先在内置的 <strong>206 个顶级域映射表</strong>里找注册局服务器;找不到的会自动去
+      <code>whois.iana.org</code> 查 <code>refer</code> 字段动态发现,所以冷门后缀也能查。</li>
+    <li>通过 <strong>TCP 43 端口</strong>直连注册局。</li>
+    <li>很多注册局(比如 Verisign 的 <code>.com</code>)只返回"薄"数据,应用会自动读响应里的
+      <code>Registrar WHOIS Server</code> 字段,<strong>再跳到注册商服务器查一次</strong>,
+      把注册人、滥用举报邮箱等信息也拿回来。</li>
+  </ul>
+  <p>
+    结果会被解析成结构化字段:注册商、注册/到期/更新日期、域名年龄、剩余天数、
+    EPP 状态码(带中文解释)、域名服务器、DNSSEC 状态。
+  </p>
+  <div class="tip">
+    「概览」页顶部的时间轴会直观显示域名生命周期 —— 绿色是正常,橙色表示 45 天内到期,
+    红色表示已经过期。
+  </div>
+
+  <h3>EPP 状态码速查</h3>
+  <table>
+    <tr><th>状态码</th><th>含义</th></tr>
+    <tr><td><code>clientTransferProhibited</code></td><td>客户端禁止转移 —— 域名被锁定,防止被恶意转出(正常保护措施)</td></tr>
+    <tr><td><code>clientHold</code></td><td>客户端暂停解析 —— 通常因为邮箱未验证或欠费</td></tr>
+    <tr><td><code>serverHold</code></td><td>注册局暂停解析 —— 更严重的暂停</td></tr>
+    <tr><td><code>redemptionPeriod</code></td><td>赎回期 —— 已过期,原持有人可高价赎回</td></tr>
+    <tr><td><code>pendingDelete</code></td><td>待删除 —— 即将释放,很快可以重新注册</td></tr>
+  </table>
+
+  <h2 id="dns">DNS 记录</h2>
+  <p>
+    支持 <code>A</code>、<code>AAAA</code>、<code>CNAME</code>、<code>MX</code>、<code>NS</code>、
+    <code>TXT</code>、<code>SOA</code>、<code>CAA</code>、<code>SRV</code>、<code>PTR</code>
+    全部常见类型,结果按类型分组显示。
+  </p>
+
+  <h2 id="avail">可用性检测</h2>
+  <p>判断能不能注册,单看任何一个数据源都不靠谱,所以这里用三源交叉验证:</p>
+  <table>
+    <tr><th>数据源</th><th>判为「已注册」</th><th>判为「可注册」</th></tr>
+    <tr><td>WHOIS</td><td>存在注册记录</td><td>返回 <code>no match</code></td></tr>
+    <tr><td>DNS</td><td>存在 <strong>NS 或 SOA 委派</strong></td><td>NS 和 SOA 都返回 NXDOMAIN</td></tr>
+    <tr><td>RDAP</td><td>返回域名对象</td><td>返回 404</td></tr>
+  </table>
+  <div class="tip warn">
+    <strong>为什么不用 A 记录判断?</strong> 因为 NXDOMAIN 劫持很常见 ——
+    部分运营商和企业 DNS 会把不存在的域名解析到广告页或保留地址段
+    (<code>198.18.0.0/15</code> 之类),凭空造出一条 A 记录。而已注册的域名一定有 NS 委派。
+    应用会检测这种异常并在结果里标注。
+  </div>
+  <p>
+    三个数据源会各自投票,结论不一致时按「已注册」处理并降低置信度,
+    同时在「依据」里列出每一票的具体理由。
+  </p>
+
+  <h2 id="batch">批量查询</h2>
+  <p>
+    展开页面下方的「批量查询 / 可用性检测」,每行填一个域名(或用空格、逗号分隔),
+    最多 200 个。结果会<strong>实时流式</strong>逐个返回,不用等全部查完。
+    并发数可以调,但调太高容易触发注册局限流。
+  </p>
+
+  <h2 id="export">导出与分享</h2>
+  <ul>
+    <li>结果上方有一排按钮:复制摘要、导出 <strong>JSON</strong> / <strong>CSV</strong> / <strong>TXT</strong>。</li>
+    <li>查询完成后窗口地址会带上域名参数,可以直接复制给人。</li>
+    <li>菜单「文件 → 打印 / 另存为 PDF」可以把当前结果存成 PDF
+      (打印时会自动隐藏搜索框和按钮,只留结果)。</li>
+  </ul>
+
+  <h2 id="keys">快捷键</h2>
+  <table>
+    <tr><th>快捷键</th><th>作用</th></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>N</kbd></td><td>新建查询(清空并聚焦输入框)</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>F</kbd></td><td>聚焦到查询输入框</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>导出当前结果为 TXT</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd></td><td>复制结果摘要</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>D</kbd></td><td>切换深色 / 浅色主题</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>P</kbd></td><td>打印 / 另存为 PDF</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>R</kbd></td><td>重新加载界面</td></tr>
+  </table>
+
+  <h2 id="limit">已知限制</h2>
+  <ul>
+    <li><strong>不是所有后缀都支持 WHOIS</strong> —— 少数新 gTLD 只有 RDAP,应用会自动降级。</li>
+    <li><strong>注册人信息大多已脱敏</strong> —— 受 GDPR 和 ICANN 临时政策影响,绝大多数域名的
+      注册人姓名、邮箱、地址都不再公开。这是行业现状,不是查询失败。</li>
+    <li><strong>WHOIS 有限流</strong> —— 注册局对同一 IP 有频率限制。应用已做节流和退避重试,
+      但短时间大量查询仍可能触发,此时结果会标注「注册局限流,结果可能不完整」。</li>
+    <li><strong>可用性仅供参考</strong> —— 交叉验证能大幅提高准确率,但最终能否注册还取决于
+      注册商的实时状态(溢价域名、保留域名等)。批量结果请以注册商为准。</li>
+    <li><strong>日期时区</strong> —— 注册局返回不带时区的时间一律按 UTC 解释(这是惯例)。
+      极少数注册局若用本地时间,可能偏差几小时。</li>
+  </ul>
+
+  <h2>网络说明</h2>
+  <p>
+    应用启动时会在本机 <code>127.0.0.1</code> 上开一个<strong>随机端口</strong>的 HTTP 服务,
+    界面就是从这个本地服务加载的。这个服务<strong>只监听回环地址</strong>,
+    局域网和公网上都访问不到,不会暴露任何信息。
+    所有查询请求都由本机直接发往注册局的 WHOIS(43 端口)和 RDAP(443 端口),
+    不经过任何第三方网站或接口。
+  </p>
+</div>
+
+<script>
+  // 跟随主界面的主题设置
+  const saved = localStorage.getItem('dl-theme');
+  if (saved) document.documentElement.dataset.theme = saved;
+  // 平滑滚动
+  document.querySelectorAll('.toc a').forEach((a) => {
+    a.addEventListener('click', (e) => {
+      const el = document.querySelector(a.getAttribute('href'));
+      if (el) { e.preventDefault(); el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    });
+  });
+</script>
+</body>
+</html>
