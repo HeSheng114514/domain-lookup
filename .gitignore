@@ -7,11 +7,14 @@ out/
 *.asar
 
 # 网页端打包中间产物(由 tools/build-web.js 生成,可重建)
-build/web-bundle.cjs
-build/sea-config.json
-build/sea-prep.blob
+build/*-bundle.cjs
+build/*-sea-config.json
+build/*-prep.blob
 
 # 图标是产物但需要提交(打包时要用),所以 build/icon.ico 与 icon.png 保留
+
+# 更新日志按约定只保留在本地,不随源码上传
+GitHub更新日志.md
 
 # 密钥与凭据 —— 防御性规则,避免误提交
 *.token

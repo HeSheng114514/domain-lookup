@@ -33,13 +33,40 @@ const DESCRIPTION = process.env.GH_DESC
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'out', '.git', '.cache']);
 /** 这些文件名不进仓库 */
 const SKIP_FILES = new Set(['.DS_Store', 'Thumbs.db', 'desktop.ini']);
-/** 这些相对路径不进仓库(构建中间产物,可由脚本重新生成) */
+/**
+ * 这些相对路径不进仓库。
+ * 注意用通配而不是写死文件名 —— 构建脚本改一次产物命名,写死的规则就会失效,
+ * 之前就因此把 blob 传上去过。
+ */
 const SKIP_PATTERNS = [
+  /^build\/.*-bundle\.cjs$/,
+  /^build\/.*-sea-config\.json$/,
+  /^build\/.*-prep\.blob$/,
   /^build\/web-bundle\.cjs$/,
   /^build\/sea-config\.json$/,
   /^build\/sea-prep\.blob$/,
   /^build\/tmp\//,
+  // 更新日志按约定只保留在本地
+  /^GitHub更新日志\.md$/,
 ];
+
+/**
+ * 需要从仓库里删掉的路径(之前误传上去的)。
+ * GitHub 的 tree API 用 base_tree 时,不提到的文件会保留,
+ * 所以删除必须显式地把 sha 设成 null。
+ */
+const DELETE_PATHS = [
+  'build/web-bundle.cjs',
+  'build/sea-config.json',
+  'build/sea-prep.blob',
+  'build/app-bundle.cjs',
+  'build/app-prep.blob',
+  'build/app-sea-config.json',
+  'build/web-prep.blob',
+  'build/web-sea-config.json',
+  'GitHub更新日志.md',
+];
+
 /** 大文件保护:超过这个大小就拒绝上传(正常文件都远小于它) */
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
 
@@ -160,6 +187,7 @@ function collectFiles(dir, base = dir, acc = []) {
   // 所以空仓库要先通过 Contents API 播种一个初始提交,拿到 ref 之后再继续。
   let parentSha = null;
   let baseTree;
+  let baseTreePaths = [];
   let seeded = false;
 
   try {
@@ -167,7 +195,12 @@ function collectFiles(dir, base = dir, acc = []) {
     parentSha = ref.object.sha;
     const parentCommit = await gh(`/repos/${owner}/${REPO}/git/commits/${parentSha}`);
     baseTree = parentCommit.tree.sha;
-    console.log(`  基于已有提交 ${parentSha.slice(0, 7)} 做增量更新`);
+    // 取回仓库现有文件列表,后面用来提示哪些文件会因为"以本地为准"而被移除
+    try {
+      const bt = await gh(`/repos/${owner}/${REPO}/git/trees/${baseTree}?recursive=1`);
+      baseTreePaths = (bt.tree || []).filter((e) => e.type === 'blob').map((e) => e.path);
+    } catch { /* 拿不到就算了,只是个提示 */ }
+    console.log(`  基于已有提交 ${parentSha.slice(0, 7)} 更新(仓库现有 ${baseTreePaths.length} 个文件)`);
   } catch (err) {
     if (err.status !== 404 && err.status !== 409) throw err;
     console.log('  空仓库,先播种一个初始提交(GitHub 不允许在空仓库上建 blob)');
@@ -206,11 +239,22 @@ function collectFiles(dir, base = dir, acc = []) {
   console.log(`  ✓ ${treeEntries.length} 个 blob 创建完成`);
 
   // ---- 6. 组装 tree ----
+  // 这里**不带 base_tree**,而是用本地文件列表组成一棵完整的树。
+  // 原因:用 base_tree 时没提到的路径会保留,要删文件就得把 sha 设成 null,
+  // 而 GitHub 对那种写法的支持不太稳(实测会报 GitRPC::BadObjectState)。
+  // 直接用完整树,仓库内容就等于本地文件列表,不多不少,也不需要"删除"这个概念。
+  const removed = baseTreePaths.filter((p) => !files.some((f) => f.rel === p));
+
   const tree = await gh(`/repos/${owner}/${REPO}/git/trees`, {
     method: 'POST',
-    body: baseTree ? { base_tree: baseTree, tree: treeEntries } : { tree: treeEntries },
+    body: { tree: treeEntries },
   });
   console.log(`  ✓ tree 创建完成 ${tree.sha.slice(0, 7)}`);
+  if (removed.length) {
+    console.log(`  ✓ 仓库内容以本地为准,移除 ${removed.length} 个多余文件:`);
+    for (const p of removed.slice(0, 12)) console.log(`      - ${p}`);
+    if (removed.length > 12) console.log(`      … 等共 ${removed.length} 个`);
+  }
 
   // ---- 7. 创建 commit ----
   // 如果刚才为了播种建过一个提交,这里就建一个"无父提交"的 commit,
