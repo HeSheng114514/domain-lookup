@@ -1,16 +1,27 @@
 'use strict';
 
 /**
- * 构建网页端「单文件免安装版」 —— node tools/build-web.js
+ * 构建「单文件免安装版」 —— node tools/build-web.js
  *
- * 流程:
- *   1. esbuild 把整个项目(server.js + lib/ + sea/entry.js)打成单个 JS 文件
+ * 同一份代码打成两种 exe:
+ *
+ *   web 模式 → dist/域名查询-web/域名查询-web.exe
+ *              起服务后用系统默认浏览器打开(普通标签页)
+ *
+ *   app 模式 → dist/域名查询-轻量版/域名查询.exe
+ *              起服务后用 Edge/Chrome 的 --app 打开,得到无标签栏、无地址栏的
+ *              独立窗口。这就是"不打包 Chromium 的桌面版":
+ *              体积从 320 MB 降到 90 MB,代价是依赖目标机器装过 Edge/Chrome。
+ *
+ * 构建流程:
+ *   1. esbuild 把整个项目(server.js + lib/ + sea/entry.js)打成单个 JS 文件,
+ *      并用 define 把模式常量注入进去
  *   2. 生成 sea-config.json,把 public/ 下的静态资源列为内嵌资源
  *   3. node --experimental-sea-config 生成注入用的 blob
- *   4. 复制 node.exe 作为模板
- *   5. postject 把 blob 注入进去,得到 域名查询-web.exe
+ *   4. 复制 node.exe 作为模板,剥离它的 Authenticode 签名
+ *   5. postject 把 blob 注入进去
  *
- * 产物在 dist/域名查询-web/,目标机器不需要安装 Node.js。
+ * 两种产物都不需要目标机器安装 Node.js。
  */
 
 const fs = require('fs');
@@ -19,29 +30,36 @@ const { execFileSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '..');
 const BUILD_DIR = path.join(ROOT, 'build');
-const OUT_DIR = path.join(ROOT, 'dist', '域名查询-web');
-const EXE_NAME = '域名查询-web.exe';
-
-const BUNDLE = path.join(BUILD_DIR, 'web-bundle.cjs');
-const SEA_CONFIG = path.join(BUILD_DIR, 'sea-config.json');
-const SEA_BLOB = path.join(BUILD_DIR, 'sea-prep.blob');
 
 // Node SEA 约定的哨兵字节串,必须与 Node 内部一致
 const SENTINEL_FUSE = 'NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2';
 
 const pkg = require(path.join(ROOT, 'package.json'));
 
+/** 要构建的两个变体 */
+const VARIANTS = [
+  {
+    mode: 'web',
+    dirName: '域名查询-web',
+    exeName: '域名查询-web.exe',
+    label: '网页端(系统默认浏览器)',
+  },
+  {
+    mode: 'app',
+    dirName: '域名查询-轻量版',
+    exeName: '域名查询.exe',
+    label: '桌面版(轻量,系统浏览器内核)',
+  },
+];
+
 /* -------------------- 收集内嵌资源 -------------------- */
 
-function collectAssets(dir, base = dir, acc = {}) {
+function collectAssets(dir, acc = {}) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     const rel = path.relative(ROOT, full).split(path.sep).join('/');
-    if (entry.isDirectory()) {
-      collectAssets(full, base, acc);
-    } else if (entry.isFile()) {
-      acc[rel] = rel; // 键即相对路径,值同样是相对路径(相对项目根目录)
-    }
+    if (entry.isDirectory()) collectAssets(full, acc);
+    else if (entry.isFile()) acc[rel] = rel; // 键即相对路径,值也相对项目根目录
   }
   return acc;
 }
@@ -88,104 +106,27 @@ function stripAuthenticode(file) {
 
   buf.writeUInt32LE(0, secOff);
   buf.writeUInt32LE(0, secOff + 4);
-  // 证书表固定在文件末尾,直接截掉
-  fs.writeFileSync(file, buf.subarray(0, certFileOff));
+  fs.writeFileSync(file, buf.subarray(0, certFileOff)); // 证书表固定在文件末尾
   return { stripped: true, removed: certSize };
 }
 
-/* -------------------- 主流程 -------------------- */
+/* -------------------- 说明文件 -------------------- */
 
-(async () => {
-  console.log('');
-  console.log('  构建网页端单文件版');
-  console.log('  ──────────────────────────────────────────────');
+function readmeText(v) {
+  const usage = v.mode === 'app'
+    ? `双击「${v.exeName}」即可。程序会在本机起一个网页服务,
+并用系统自带浏览器(Edge 或 Chrome)的"应用窗口"打开界面 ——
+没有标签栏、没有地址栏,任务栏里是独立的一项,和一个原生桌面程序一样。
 
-  fs.mkdirSync(BUILD_DIR, { recursive: true });
+不需要安装 Node.js —— 运行时已经打包在这个 exe 里了。
+只需要机器上装过 Microsoft Edge(Windows 10/11 默认自带)或 Chrome;
+如果两者都没有,会自动回退到用默认浏览器打开。`
+    : `双击「${v.exeName}」即可。程序会在本机起一个网页服务,
+并自动用系统默认浏览器打开界面。
 
-  // ---- 1. 打包 JS ----
-  process.stdout.write('  [1/5] esbuild 打包… ');
-  const esbuild = require('esbuild');
-  const result = await esbuild.build({
-    entryPoints: [path.join(ROOT, 'sea', 'entry.js')],
-    bundle: true,
-    platform: 'node',
-    target: 'node20',
-    format: 'cjs',
-    outfile: BUNDLE,
-    // 打包后没有 node_modules,所有依赖都必须内联进来
-    packages: 'bundle',
-    logLevel: 'silent',
-    banner: {
-      js: `/* 域名查询工具 网页端单文件版 · 由 tools/build-web.js 生成 */`,
-    },
-  });
-  if (result.warnings.length) {
-    console.log('\n    警告:');
-    for (const w of result.warnings) console.log(`      ${w.text}`);
-  }
-  const bundleSize = fs.statSync(BUNDLE).size;
-  console.log(`完成 (${(bundleSize / 1024).toFixed(1)} KB)`);
+不需要安装 Node.js —— 运行时已经打包在这个 exe 里了。`;
 
-  // ---- 2. 生成 sea-config ----
-  process.stdout.write('  [2/5] 生成 sea-config.json… ');
-  const assets = collectAssets(path.join(ROOT, 'public'));
-  const seaConfig = {
-    main: path.relative(ROOT, BUNDLE).split(path.sep).join('/'),
-    output: path.relative(ROOT, SEA_BLOB).split(path.sep).join('/'),
-    disableExperimentalSEAWarning: true,
-    useSnapshot: false,
-    useCodeCache: false,
-    assets,
-  };
-  fs.writeFileSync(SEA_CONFIG, JSON.stringify(seaConfig, null, 2));
-  console.log(`完成 (内嵌 ${Object.keys(assets).length} 个资源: ${Object.keys(assets).join(', ')})`);
-
-  // ---- 3. 生成 SEA blob ----
-  process.stdout.write('  [3/5] 生成 SEA blob… ');
-  try {
-    execFileSync(process.execPath, ['--experimental-sea-config', path.relative(ROOT, SEA_CONFIG)], {
-      cwd: ROOT,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-  } catch (err) {
-    console.log('失败');
-    console.error(`\n    ${err.stderr ? err.stderr.toString() : err.message}`);
-    process.exit(1);
-  }
-  const blobSize = fs.statSync(SEA_BLOB).size;
-  console.log(`完成 (${(blobSize / 1024).toFixed(1)} KB)`);
-
-  // ---- 4. 复制 node.exe 作为模板,并剥离其数字签名 ----
-  process.stdout.write('  [4/5] 复制 Node 运行时… ');
-  fs.rmSync(OUT_DIR, { recursive: true, force: true });
-  fs.mkdirSync(OUT_DIR, { recursive: true });
-  const exePath = path.join(OUT_DIR, EXE_NAME);
-  fs.copyFileSync(process.execPath, exePath);
-  const tplSize = fs.statSync(exePath).size;
-  const sig = stripAuthenticode(exePath);
-  if (sig.stripped) {
-    console.log(`完成 (模板 ${(tplSize / 1048576).toFixed(1)} MB,已剥离 ${(sig.removed / 1024).toFixed(0)} KB 签名)`);
-  } else {
-    console.log(`完成 (模板 ${(tplSize / 1048576).toFixed(1)} MB,${sig.reason})`);
-  }
-
-  // ---- 5. 注入 blob ----
-  process.stdout.write('  [5/5] 注入 SEA blob… ');
-  try {
-    const { inject } = require('postject');
-    await inject(exePath, 'NODE_SEA_BLOB', fs.readFileSync(SEA_BLOB), {
-      sentinelFuse: SENTINEL_FUSE,
-    });
-  } catch (err) {
-    console.log('失败');
-    console.error(`\n    ${err.message}`);
-    process.exit(1);
-  }
-  console.log('完成');
-
-  // ---- 附带许可证与说明 ----
-  fs.copyFileSync(path.join(ROOT, 'LICENSE'), path.join(OUT_DIR, 'LICENSE'));
-  fs.writeFileSync(path.join(OUT_DIR, '说明.txt'), `域名查询工具 · 网页端(单文件免安装版)
+  return `域名查询工具 · ${v.label}
 ================================================
 
 版本:     ${pkg.version}
@@ -194,18 +135,17 @@ function stripAuthenticode(file) {
 
 怎么用
 ------
-双击「${EXE_NAME}」即可。程序会在本机起一个网页服务,
-并自动打开浏览器。关掉那个黑色窗口就是停止服务。
-
-不需要安装 Node.js —— 运行时已经打包在这个 exe 里了。
+${usage}
 
 默认端口 8420,如果被占用会自动往后找。
+关掉那个黑色窗口就是停止服务。
 
 常用环境变量
 ------------
   set PORT=9000        换一个端口
   set DL_NO_OPEN=1     启动时不自动打开浏览器
   set DL_HOST=0.0.0.0  允许局域网内其他设备访问(默认只监听本机)
+  set DL_BROWSER=路径  指定用哪个浏览器打开
 
 命令行版本
 ----------
@@ -224,22 +164,116 @@ function stripAuthenticode(file) {
 本程序以 GNU General Public License v3.0 或更新版本发布。
 完整许可证文本见同目录下的 LICENSE 文件。
 本程序不提供任何担保,详见许可证。
-`);
+`;
+}
 
-  // ---- 汇总 ----
-  const exeSize = fs.statSync(exePath).size;
-  let dirSize = 0;
-  for (const f of fs.readdirSync(OUT_DIR)) dirSize += fs.statSync(path.join(OUT_DIR, f)).size;
+/* -------------------- 构建单个变体 -------------------- */
+
+async function buildVariant(v) {
+  const esbuild = require('esbuild');
+
+  const bundle = path.join(BUILD_DIR, `${v.mode}-bundle.cjs`);
+  const seaConfigPath = path.join(BUILD_DIR, `${v.mode}-sea-config.json`);
+  const seaBlob = path.join(BUILD_DIR, `${v.mode}-prep.blob`);
+  const outDir = path.join(ROOT, 'dist', v.dirName);
+  const exePath = path.join(outDir, v.exeName);
 
   console.log('');
-  console.log('  构建完成');
+  console.log(`  构建 ${v.label}`);
   console.log('  ──────────────────────────────────────────────');
-  console.log(`  输出目录:   ${OUT_DIR}`);
-  console.log(`  可执行文件: ${exePath}`);
-  console.log(`  大小:       ${(exeSize / 1048576).toFixed(1)} MB`);
-  console.log(`  内嵌资源:   ${Object.keys(assets).length} 个`);
+
+  // ---- 1. 打包 JS ----
+  process.stdout.write('  [1/5] esbuild 打包… ');
+  const result = await esbuild.build({
+    entryPoints: [path.join(ROOT, 'sea', 'entry.js')],
+    bundle: true,
+    platform: 'node',
+    target: 'node20',
+    format: 'cjs',
+    outfile: bundle,
+    packages: 'bundle',
+    logLevel: 'silent',
+    // 把运行模式编译进去,运行时就不用判断了
+    define: { __DL_MODE__: JSON.stringify(v.mode) },
+    banner: { js: `/* 域名查询工具 ${v.label} · 由 tools/build-web.js 生成 */` },
+  });
+  if (result.warnings.length) {
+    for (const w of result.warnings) console.log(`\n    警告: ${w.text}`);
+  }
+  console.log(`完成 (${(fs.statSync(bundle).size / 1024).toFixed(1)} KB)`);
+
+  // ---- 2. 生成 sea-config ----
+  process.stdout.write('  [2/5] 生成 sea-config… ');
+  const assets = collectAssets(path.join(ROOT, 'public'));
+  fs.writeFileSync(seaConfigPath, JSON.stringify({
+    main: path.relative(ROOT, bundle).split(path.sep).join('/'),
+    output: path.relative(ROOT, seaBlob).split(path.sep).join('/'),
+    disableExperimentalSEAWarning: true,
+    useSnapshot: false,
+    useCodeCache: false,
+    assets,
+  }, null, 2));
+  console.log(`完成 (内嵌 ${Object.keys(assets).length} 个资源)`);
+
+  // ---- 3. 生成 SEA blob ----
+  process.stdout.write('  [3/5] 生成 SEA blob… ');
+  try {
+    execFileSync(process.execPath, ['--experimental-sea-config', path.relative(ROOT, seaConfigPath)], {
+      cwd: ROOT,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } catch (err) {
+    console.log('失败');
+    console.error(`\n    ${err.stderr ? err.stderr.toString() : err.message}`);
+    throw err;
+  }
+  console.log(`完成 (${(fs.statSync(seaBlob).size / 1024).toFixed(1)} KB)`);
+
+  // ---- 4. 复制运行时并剥离签名 ----
+  process.stdout.write('  [4/5] 复制 Node 运行时… ');
+  fs.rmSync(outDir, { recursive: true, force: true });
+  fs.mkdirSync(outDir, { recursive: true });
+  fs.copyFileSync(process.execPath, exePath);
+  const tplSize = fs.statSync(exePath).size;
+  const sig = stripAuthenticode(exePath);
+  console.log(sig.stripped
+    ? `完成 (模板 ${(tplSize / 1048576).toFixed(1)} MB,已剥离 ${(sig.removed / 1024).toFixed(0)} KB 签名)`
+    : `完成 (模板 ${(tplSize / 1048576).toFixed(1)} MB,${sig.reason})`);
+
+  // ---- 5. 注入 blob ----
+  process.stdout.write('  [5/5] 注入 SEA blob… ');
+  const { inject } = require('postject');
+  await inject(exePath, 'NODE_SEA_BLOB', fs.readFileSync(seaBlob), {
+    sentinelFuse: SENTINEL_FUSE,
+  });
+  console.log('完成');
+
+  // ---- 附带许可证与说明 ----
+  fs.copyFileSync(path.join(ROOT, 'LICENSE'), path.join(outDir, 'LICENSE'));
+  fs.writeFileSync(path.join(outDir, '说明.txt'), readmeText(v));
+
+  const exeSize = fs.statSync(exePath).size;
   console.log('');
-  console.log('  已附带 LICENSE 与 说明.txt');
+  console.log(`  输出: ${outDir}`);
+  console.log(`  大小: ${(exeSize / 1048576).toFixed(1)} MB`);
+  return { ...v, outDir, exePath, size: exeSize };
+}
+
+/* -------------------- 主流程 -------------------- */
+
+(async () => {
+  fs.mkdirSync(BUILD_DIR, { recursive: true });
+  const built = [];
+  for (const v of VARIANTS) {
+    built.push(await buildVariant(v));
+  }
+
+  console.log('');
+  console.log('  ══════════════════════════════════════════════');
+  console.log('  全部构建完成');
+  for (const b of built) {
+    console.log(`    ${b.label.padEnd(24)} ${b.dirName}`);
+  }
   console.log('');
 })().catch((err) => {
   console.error('\n  构建失败:', err && err.message ? err.message : err);

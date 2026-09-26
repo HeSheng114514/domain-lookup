@@ -22,16 +22,42 @@
 
 ## 下载
 
-到 [Releases](https://github.com/HeSheng114514/domain-lookup/releases) 页面下载,
-两个版本都是**免安装**的,解压后双击即可,**不需要安装 Node.js**。
+到 [Releases](https://github.com/HeSheng114514/domain-lookup/releases) 页面下载。
+三个包都是**免安装**的,解压后直接双击,**不需要安装 Node.js**。
 
 | 版本 | 文件 | 大小 | 适用场景 |
 |---|---|---|---|
-| 🖥️ 桌面版 | `domain-lookup-desktop-*.zip` | 约 140 MB | 独立桌面窗口、中文菜单、内置使用说明 |
-| 🌐 网页版 | `domain-lookup-web-*.zip` | 约 38 MB | 单文件,双击后自动打开浏览器,更轻量 |
+| 🖥️ **桌面版(轻量)** | `domain-lookup-desktop-*.zip` | 约 33 MB | 独立应用窗口,无标签栏无地址栏,复用系统 Edge/Chrome 内核 |
+| 🌐 **网页版** | `domain-lookup-web-*.zip` | 约 33 MB | 打开系统默认浏览器的标签页 |
+| 🖥️ **桌面版(完整)** | `domain-lookup-desktop-full-*.zip` | 约 129 MB | 内置 Chromium + 原生菜单栏,不依赖任何浏览器 |
 
-- **桌面版** —— 解压后双击 `域名查询.exe`
-- **网页版** —— 解压后双击 `域名查询-web.exe`,程序会起一个本地服务并自动打开浏览器
+**该选哪个?**
+
+| 你的情况 | 选它 |
+|---|---|
+| 想要桌面程序,但不想下 100 多 MB | **桌面版(轻量)** |
+| 只想在浏览器里查一下 | **网页版** |
+| 机器上没装 Edge/Chrome,或想要原生菜单栏 | **桌面版(完整)** |
+| 喜欢命令行 | 拿源码跑 `node cli.js example.com`,零依赖 |
+
+### 关于体积
+
+这个项目**自己的代码只有约 350 KB**,剩下的全是运行时:
+
+| 组成 | 体积 | 说明 |
+|---|---|---|
+| 应用代码 | 0.35 MB | `server.js` + `lib/` + `public/` + `cli.js` |
+| Node.js 运行时 | 89 MB | 打包进单文件 exe,免安装的关键 |
+| Chromium | 235 MB | **只有完整桌面版才带** |
+
+所以「桌面版(轻量)」的做法是:只带 Node 运行时(负责干活的本地服务),
+界面则复用系统里已经有的 Edge 内核来显示 —— 省掉的正是那 235 MB 的 Chromium。
+
+完整桌面版还额外裁掉了 `dxcompiler.dll` / `dxil.dll`(WebGPU 着色器编译器,本应用不用),
+比 v1.0.0 又小了约 10 MB。
+
+> `ffmpeg.dll` 虽然也用不到,但实测它是 Electron 启动的**硬依赖** ——
+> 删掉后进程能起来、窗口却永远不出现,所以保留。
 
 想要命令行版本,直接拿源码跑就行(零依赖):
 
@@ -227,11 +253,26 @@ node cli.js --bulk domains.txt --check --concurrency=6
 ## 构建发布产物
 
 ```bash
-npm install          # 只在构建桌面版时需要(下载 Electron)
-npm run build:web    # 网页端单文件 exe → dist/域名查询-web/
-npm run build:desktop # 桌面版          → dist/域名查询-win32-x64/
-npm run build:all    # 两个都构建
+npm install           # 只在构建「完整桌面版」时需要(下载 Electron,约 150MB)
+npm run build:web     # 一次构建两个单文件 exe:
+                      #   dist/域名查询-web/域名查询-web.exe        (web 模式)
+                      #   dist/域名查询-轻量版/域名查询.exe          (app 模式)
+npm run build:desktop # 完整桌面版(Electron)→ dist/域名查询-win32-x64/
+npm run build:all     # 全部构建
+npm run release       # 压缩 + 生成 SHA256 + 发布到 Release
 ```
+
+### 三种形态的关系
+
+| 形态 | 运行时 | 界面由谁显示 | 体积 |
+|---|---|---|---|
+| 网页版 | 内嵌 Node.js | 系统默认浏览器标签页 | 33 MB |
+| 桌面版(轻量) | 内嵌 Node.js | 系统 Edge/Chrome 的 `--app` 窗口 | 33 MB |
+| 桌面版(完整) | 内嵌 Node.js + Chromium | Electron 自己的窗口 | 129 MB |
+| 命令行 / 源码 | 需要本机 Node.js | 终端 / 浏览器 | 0.35 MB |
+
+前两者**用的是同一个 exe**,只是 esbuild 打包时通过 `define: { __DL_MODE__ }`
+把模式常量编译了进去,运行时据此决定用哪种方式打开界面。
 
 ### 网页端是怎么做成单文件的
 

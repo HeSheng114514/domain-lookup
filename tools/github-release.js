@@ -34,19 +34,25 @@ if (!TOKEN) {
   process.exit(1);
 }
 
-/** 要发布的两个包 */
+/** 要发布的包 */
 const PACKAGES = [
   {
     key: 'desktop',
-    dir: path.join(DIST, '域名查询-win32-x64'),
-    zipName: `domain-lookup-desktop-${TAG}-win32-x64.zip`,
-    label: '桌面版(Windows x64)',
+    dir: path.join(DIST, '域名查询-轻量版'),
+    zipName: `domain-lookup-desktop-${TAG}.zip`,
+    label: '桌面版(轻量)',
   },
   {
     key: 'web',
     dir: path.join(DIST, '域名查询-web'),
     zipName: `domain-lookup-web-${TAG}.zip`,
-    label: '网页版(单文件)',
+    label: '网页版',
+  },
+  {
+    key: 'desktop-full',
+    dir: path.join(DIST, '域名查询-win32-x64'),
+    zipName: `domain-lookup-desktop-full-${TAG}-win32-x64.zip`,
+    label: '桌面版(完整 · Electron)',
   },
 ];
 
@@ -140,37 +146,64 @@ const fmtMB = (bytes) => `${(bytes / 1048576).toFixed(1)} MB`;
 function buildReleaseNotes(assets) {
   const desktop = assets.find((a) => a.key === 'desktop');
   const web = assets.find((a) => a.key === 'web');
+  const full = assets.find((a) => a.key === 'desktop-full');
 
-  return `## 下载
+  return `## 本次变化:体积大幅缩减
 
-两个版本都是**免安装**的,下载解压后直接双击即可,**不需要安装 Node.js**。
+上一版桌面版要 139 MB(里面 73% 是打包进去的 Chromium)。
+这一版把桌面界面改成**复用系统自带的 Edge/Chrome 内核**,
+同一个窗口体验,下载体积从 **139 MB 降到 ${fmtMB(desktop.size)}**(约 1/4)。
+
+想要完全不依赖浏览器的原生版,下载量最大的那个 \`${full.name}\`。
+
+---
+
+## 下载
+
+三个包都是**免安装**的,解压后直接双击,**不需要安装 Node.js**。
 
 | 版本 | 文件 | 大小 | 说明 |
 |---|---|---|---|
-| 🖥️ **桌面版** | \`${desktop.name}\` | ${fmtMB(desktop.size)} | 独立桌面窗口,有自己的任务栏图标和中文菜单 |
-| 🌐 **网页版** | \`${web.name}\` | ${fmtMB(web.size)} | 单文件,双击后自动打开浏览器,更轻量 |
+| 🖥️ **桌面版(轻量)** | \`${desktop.name}\` | ${fmtMB(desktop.size)} | 独立应用窗口,无标签栏无地址栏,任务栏单独一项 |
+| 🌐 **网页版** | \`${web.name}\` | ${fmtMB(web.size)} | 打开系统默认浏览器的标签页 |
+| 🖥️ **桌面版(完整)** | \`${full.name}\` | ${fmtMB(full.size)} | 内置 Chromium 和原生菜单,不依赖任何浏览器 |
 
 **该选哪个?**
 
-- 想要一个正经的桌面程序、经常用 → 选**桌面版**
-- 只想快速查一下、不想装大东西 → 选**网页版**(89 MB vs 320 MB)
-- 喜欢命令行 → 直接拿源码跑 \`node cli.js example.com\`,零依赖
+| 你的情况 | 选它 |
+|---|---|
+| 想要桌面程序,但不想下 100 多 MB | **桌面版(轻量)** |
+| 只想在浏览器里查一下 | **网页版** |
+| 机器上没装 Edge/Chrome,或者想要原生菜单栏 | **桌面版(完整)** |
+| 喜欢命令行 | 拿源码跑 \`node cli.js example.com\`,零依赖 |
 
-### 桌面版
+### 桌面版(轻量)
 
 解压 \`${desktop.name}\` 后双击 **\`域名查询.exe\`**。
 
-窗口大小和位置会记住,第二次启动会聚焦已有窗口。菜单里有导出、批量检测、
-主题切换和内置使用说明(\`F1\`)。
+程序会在本机起服务,然后用 Edge(或 Chrome)的**应用窗口模式**打开界面 ——
+没有标签栏、没有地址栏,在任务栏里是独立的一项,和一个原生程序一样。
+用的是独立的临时用户目录,不会碰你平时的浏览记录和书签。
+
+需要机器上装过 Microsoft Edge 或 Chrome(Windows 10/11 默认自带 Edge)。
+两者都没有的话会自动回退到默认浏览器。
 
 ### 网页版
 
-解压 \`${web.name}\` 后双击 **\`域名查询-web.exe\`**。程序会在本机起一个服务并
-自动打开浏览器,关掉黑色窗口就是停止服务。
+解压 \`${web.name}\` 后双击 **\`域名查询-web.exe\`**,自动用默认浏览器打开。
 
-默认端口 8420,被占用会自动往后找。想换端口:
+### 桌面版(完整)
+
+解压 \`${full.name}\` 后双击 **\`域名查询.exe\`**。这是内置 Chromium 的版本,
+窗口大小和位置会记住,菜单栏里有导出、批量检测、主题切换和内置使用说明(\`F1\`)。
+
+体积大是因为里面打包了整个 Chromium —— 如果不介意下载量,这个版本的体验最完整。
+
+### 端口
+
+三个版本默认都用 8420,被占用会自动往后找。想指定端口:
 \`\`\`cmd
-set PORT=9000 && 域名查询-web.exe
+set PORT=9000 && 域名查询.exe
 \`\`\`
 
 ---

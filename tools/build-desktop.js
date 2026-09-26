@@ -36,7 +36,40 @@ const IGNORE = [
 ];
 
 /**
- * 打包收尾:精简语言包 + 附带许可证和说明。
+ * 打包时可以从 Electron 里删掉的组件。
+ *
+ * 实测结论:
+ *   - dxcompiler.dll / dxil.dll —— WebGPU 的着色器编译器,本应用完全不用。
+ *     删掉后 24 项自检全通过(省约 10 MB 压缩体积)。
+ *   - ffmpeg.dll —— **不能删!** 它是 Electron 启动的硬依赖,
+ *     删掉后进程能起来、但窗口永远不出现,自检会挂死。
+ *   - vk_swiftshader / d3dcompiler_47 —— 无 GPU 环境(远程桌面、虚拟机)的
+ *     渲染兜底,只省几 MB 但风险大,保留。
+ */
+const PRUNABLE = [
+  { name: 'dxcompiler.dll', note: 'WebGPU 着色器编译器' },
+  { name: 'dxil.dll', note: 'WebGPU 着色器签名库' },
+];
+
+/** 删除用不到的组件,返回省下的字节数与删掉的文件名 */
+function pruneUnused(buildPath) {
+  let saved = 0;
+  const removed = [];
+  for (const item of PRUNABLE) {
+    const p = path.join(buildPath, item.name);
+    if (!fs.existsSync(p)) continue;
+    try {
+      const size = fs.statSync(p).size;
+      fs.unlinkSync(p);
+      saved += size;
+      removed.push(item.name);
+    } catch { /* 删不掉不影响打包 */ }
+  }
+  return { saved, removed };
+}
+
+/**
+ * 打包收尾:精简语言包 + 删除用不到的组件 + 附带许可证和说明。
  *
  * 注意:必须挂在 afterComplete 上 —— 只有它的 buildPath 才是最终输出目录。
  * afterCopy 拿到的 buildPath 是 resources/app,那里根本没有 locales。
@@ -64,6 +97,12 @@ async function finalizeOutput(...args) {
     if (removed) {
       console.log(`  精简语言包: 删除 ${removed} 个文件,省下 ${(saved / 1048576).toFixed(1)} MB`);
     }
+  }
+
+  // ---- 删除本应用用不到的 Electron 组件 ----
+  const pruned = pruneUnused(buildPath);
+  if (pruned.removed.length) {
+    console.log(`  移除无用组件: ${pruned.removed.join(', ')} — 省 ${(pruned.saved / 1048576).toFixed(1)} MB`);
   }
 
   // ---- 附带 GPL 许可证与说明 ----

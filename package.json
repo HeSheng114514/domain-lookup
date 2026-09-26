@@ -1,7 +1,7 @@
 {
   "name": "domain-lookup",
   "productName": "域名查询",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "域名查询工具:WHOIS / RDAP / DNS / 可用性检测。零依赖 Node.js 实现,提供桌面版与网页版。",
   "main": "electron/main.js",
   "bin": {
